@@ -1,75 +1,103 @@
-# Unified Memory
+Unified Memory
+ MacOS Native Desktop Monitor SwiftUI + Swift Charts
+- No third-party dependencies
+- No internet access
+- No admin rights
+- No background process
 
-Native macOS desktop monitor, built with SwiftUI and Swift Charts. No third-party dependencies, network access, administrator privileges, or background service.
+Run
+ App is at ~/Applications/Unified Memory.app
 
-## Run
-
-The app is installed at `~/Applications/Unified Memory.app`.
-
-```sh
 open "$HOME/Applications/Unified Memory.app"
-```
+ - Memory Overview:
+ - Current physical memory usage:
+ - macOS pressure
+ - Swap
+ - App / Wired / Compressed / Cache / Free breakdown
+ - History of usage
+ - Bars for physical memory / swap / disk used vs free.
+ - GPU driver allocations draw from physical pool. Not extra VRAM.
+ - Memory per process
+ - Name, PID, memory footprint and percentage of the total installed 32 GiB. Sorted by largest.
+ - Search for name or exact PID.
+ - Click row to **Terminate...** (SIGTERM) or **Force Kill...** (SIGKILL).
+ - Press enter for confirm.
+ - Default keyboard press is cancel.
+ - Not saved work can be lost. App helpers might restart.
+ - Sensors
+ - Current numerical cards. Search and categories.
+ - Click card for precise source, units, timestamp, availability.
+ - Click star on a tile to put it into the Favorites section at the top.
+ - Favorites are stored locally for each run.
+ - Look for related icons to show lid, battery, keyboard, disk, motion, light and memory cards.
+ - Memory / Temperature / Power / System counters update at 1s, 2s, 5s.
+ - Motion / Light update at 5Hz when Sensors tab is open.
+ - ⌘P to pause all visible update in all tabs.
+ - ⌘R to take a sample even in paused state.
+ - Header displays hottest valid exposed internal temperature sensor. (not case/surface/room temp.)
+ - Click for individual temperatures.
 
-- **Memory overview:** live physical-memory usage, macOS pressure, swap, app/wired/compressed/cache/free breakdown, usage history, and physical-memory/swap/disk used-versus-free bars. GPU driver allocations share the physical pool; they are not extra VRAM.
-- **Memory by process:** names, PIDs, memory footprints, and percentage of the full installed 32 GiB, sorted largest first. Search by name or exact PID. Select a row to **Terminate…** (SIGTERM) or **Force Kill…** (SIGKILL), then confirm. Cancel is the default keyboard action. Unsaved work can be lost; app helpers may restart.
-- **Sensors:** live numeric cards with search and categories. Click a card for the exact source, units, timestamp, and availability. Star a tile to pin it into the top Favorites section; favorites persist locally across launches. Related icons identify lid, battery, keyboard, disk, motion, light, and memory cards.
-- Memory/temperature/power/system counters refresh every 1, 2, or 5 seconds. Motion/light refresh at 5 Hz while Sensors is open. **⌘P** pauses displayed updates across all tabs; **⌘R** takes a sample even while paused.
-- The header shows the hottest valid exposed internal temperature sensor, not case/surface/room temperature. Click it for individual temperature readings.
+What do the numbers mean?
+ - Physical memory is from host_statistics64 and host_page_size.
+ - Installed from macOS.
+ - Pressure and swap from sysctlbyname.
+ - App Memory: resident anon pages - purgeable pages.
+ - Wired: pages kernel keeps in RAM.
+ - Compressed: real physical RAM occupied by compressor, not the equivalent uncompressed.
+ - Cached files: file backed pages (minus speculative) + purgeable pages.
+ - Free: Kernel free pages count. Already includes speculative pages.
+ - Other: installed - that which isn't accounted by those counters. (ex. reserved memory)
+ - Snapshots are approximate. Counters that change quickly might not line up perfectly.
+ - Used memory: app + wired + compressed. Reclaimable / Free: cached files + free pages.
+ - Swap. Disk space. Not extra physical RAM.
 
-## What the numbers mean
+CPU/GPU unified memory. We show also gpu driver reported allocations - explicitly as part of same RAM pool.
+Swap is disk backed virtual memory.
+Sensor show CPU cache sizes if exposed, not adding them to app allocable RAM.
+Boot APFS storage bar shows used/free volume/pool space. APFS volumes can share pool.
 
-Physical-memory readings come from `host_statistics64` and `host_page_size`. Installed capacity comes from macOS. Pressure and swap come from `sysctlbyname`.
+ri_phys_footprint from proc_pid_rusage is per process usage. it's not just resident ram, it's also memory charge of process including compressed. don't just add rows for processes to compare with physical memory used. it's different accounting and not a 1:1 per process partition of system/kernel/shared allocations. can deny access to protected processes on macOS, showing **Unavailable** (not some made up zero)
+processes that have exited in between sampling are gone on next sample.
+process enumeration goes via ui actor.
 
-- **App memory:** resident anonymous pages minus purgeable pages.
-- **Wired:** pages the kernel keeps in RAM.
-- **Compressed:** actual physical RAM occupied by the compressor, not its uncompressed equivalent.
-- **Cached files:** file-backed pages, excluding speculative pages, plus purgeable pages.
-- **Free:** the kernel's free-page count, which already includes speculative pages.
-- **Other:** installed capacity not attributed by those counters, including reserved memory. Snapshots are approximate; rapidly changing counters may not perfectly reconcile.
-- **Memory used:** app + wired + compressed. **Reclaimable / free:** cached files + free pages.
-- **Swap:** disk storage, not additional physical RAM.
+GiB is 1073741824 bytes, MiB is 1048576 bytes
 
-CPU and GPU share unified memory. GPU driver-reported allocations are also shown, explicitly as part of that same RAM pool. Swap is disk-backed virtual memory. CPU cache sizes are shown in Sensors when exposed, not added to app-allocatable RAM. The boot APFS storage bar shows used and free volume/pool space; APFS volumes can share that pool.
+## hardware sensors & status
 
-Per-process usage is `ri_phys_footprint` from `proc_pid_rusage`. It represents the process's memory charge, including compressed memory, rather than only resident RAM. Do not add the process rows and compare the result with physical memory used: the accounting is different, and system/kernel/shared allocations are not a one-to-one per-process partition. macOS can deny access to protected processes; these display **Unavailable**, not a fabricated zero. Processes that exit during sampling disappear on subsequent samples. Process enumeration runs off the UI actor.
+Apple M5 this had discovery of 195 thermal channels (61 physical/correlated values)
+total 286 (sensor prefix) smc channels, 81 electrical (HID) channels, motion/light, battery/charger counters, system/GPU/radio/storage telemetry.
+dashboard after merging thermal duplicate keys has 582 different channels/status cards.
+machine/OS specific - not guaranteeing every channel is physical sensors.
 
-GiB means 1,073,741,824 bytes; MiB means 1,048,576 bytes.
+- Lid: actual hinge Tilt X degrees from native HID report descriptor. Raw/live changed 132° to 113°.
+- Motion: six actual axes for accelerometer/gyroscope from rate-control sensor sub (process-owned). **Raw/unclassified**, explicitly, since we don't see a known physical unit/chassis axis mapping in vendor report. Degrees pitch/roll from acceleration vector in sensor frame, not calib laptop att. Data over 1 sec ago no longer accessible.
+- Brightness/Light: actual in-built display/keyboard backlight settings % and lux ambient illuminance. Separate labeled raw light channels. Brightness % not nits of luminance.
+- Temp: native HID events and readonly AppleSMC die channels. We keep all discovered channels' status. We don't interpret calib'd, disconnected/sentinel, nonnumeric, or raw/unclass'd fw channels to invent phys Celsius values.
+- Electric/Battery: known SMC power/current/voltage. Native battery: charge/voltage/current/caps/cycles/health/status. Per-cell voltages. Charger exposed numeric counters. Unknown electric HID scale -- we don't guess volts/amps. AppleSmartBattery Temp in deciKelvin. All virt temp fields -- raw.
+- Other status: CPU usage/caches. Native thermal pressure. GPU driver counters. Storage capacity. WiFi radio/signal/link status. Detected TouchID hardware. (We never read biometrics payloads or kbds.) No fan svc/key -- this Mac not exposing it; the fan card gives fan's report instead of fake RPM.
 
-## Hardware sensors and status
+Each tile has a top status strip. Explicitly use only display guidelines for grn/orng/red levels where scale is sensible: 70/85°C internal temp. 40/45°C batt temp. 60/75°C storage temp. medium/high usage at70/90%. Brightness setting bands40/80%. low battery charge25/10%. Not manufacturer safety limits! All unknown/raw/lid/ambient/electric, no reason to defend normal/high limit -- gray and explains. click/hover for threshold/interpretation.
 
-On this Apple M5, discovery exposed 195 thermal channels (61 corroborated physical readings), 286 sensor-prefixed SMC channels in total, 81 electrical HID channels, motion/light, battery/charger counters, and system/GPU/radio/storage telemetry. The dashboard displayed 582 distinct channels/status cards after merging duplicate thermal keys. These counts are machine/OS-specific, not a promise that all channels are physical sensors.
+Some private macos interfaces for temperature, rate-controlled motion, DisplayServices, CoreBrightness, ApplesMC. No need for root. This machine. Could vary by os/hardware. Discovered and rejected/permission-denied channels still available. Read-only sensor values. Motion client only asking for their own 200ms interval. Give up their own on teardown. No permanent, global sensor power/report state alterations.
 
-- **Lid:** actual hinge Tilt X degrees from the native HID report descriptor. Observed live readings changed from 132° to 113°.
-- **Motion:** six actual accelerometer/gyroscope axes from a process-owned rate-controlled sensor subscription. These remain explicitly **raw/unclassified** because the vendor report exposes no confirmed physical unit/chassis-axis mapping. Acceleration-vector pitch/roll are degrees in the sensor frame, not calibrated laptop attitude. Events older than one second become unavailable.
-- **Brightness/light:** actual built-in display and keyboard-backlight settings in percent, ambient illuminance in lux, and separately labeled raw light channels. Brightness percent is not luminance in nits.
-- **Temperature:** native HID events and read-only AppleSMC die channels; all discovered channels retain status. Calibration, disconnected/sentinel, nonnumeric, and unclassified firmware channels are not converted into invented physical Celsius readings.
-- **Electrical/battery:** established SMC power/current/voltage readings and native battery charge, voltage/current, capacities, cycles, health/status, per-cell voltages, and exposed numeric charger counters. Unknown electrical HID scale stays raw instead of guessing volts/amps. AppleSmartBattery Temperature uses deciKelvin; virtual-temperature fields remain raw.
-- **Other status:** CPU utilization and caches, native thermal pressure, GPU driver counters, storage capacity, Wi-Fi radio/signal/link status, and detected Touch ID hardware. Biometric payloads and keyboard reports are never read. No fan service/key was exposed on this Mac; the fan card reports that instead of a fake RPM.
+### Safety of process kill
 
-Every tile has a top status strip. Green/orange/red levels use explicit display guidelines only where a meaningful scale exists: internal temperature 70/85 °C, battery temperature 40/45 °C, storage temperature 60/75 °C; utilization medium/high at70/90%; brightness setting bands40/80%; low battery charge25/10%. These are **not manufacturer safety limits**. Unknown/raw/lid/ambient/electrical channels without defensible normal/high limits stay gray and say why. Click/hover for the thresholds and interpretation.
+Confirm pid + time since process started. Before sending the selected signal, service immediately rechecks for the specific identity. Deny pid1. Deny bad/non-positive pid. Deny monitor. Deny unreadable/zero identity. Report error conditions (permissions, exited, re-used pid) straight up. No elevation. Kernel accepted signal if successful. Not guaranteed exit. No pidfd-like atomic pid+signal interface in macos. There's still a tiny kernel race between rechecking and signalling.
 
-Temperature, rate-controlled motion, DisplayServices, CoreBrightness, and AppleSMC include private macOS interfaces. They work without root on this machine, but may change across OS/hardware versions. Discovered unavailable/permission-blocked channels remain visible. Sensor readings are read-only; the motion client requests only its own 200 ms interval and releases that ownership on teardown. No persistent global sensor power/reporting-state settings are changed.
+Actual lid/light/temp/motion changes tested for verification. Various sample/pause and manual refresh. Pin favorites and card info. Capacity bars. Native pid confirmation cancel/sigterm/sigkill (owned ephemeral /bin/sleep kids only). 30 regressions, deterministic: native decode. Sensor min/max. Accounting. Counter wrap. Process identity safety.
 
-## Process termination safety
+### Build
 
-The confirmation captures PID plus process start time; the service revalidates that exact identity immediately before sending the chosen signal. PID1, invalid/nonpositive PIDs, the monitor itself, and unreadable/zero identities are rejected. Permission errors, exited processes, and PID reuse are reported honestly, without elevation. Successful status means the kernel accepted the signal, not that exit is guaranteed. macOS has no pidfd-style atomic identity-plus-signal API; a small kernel race remains between revalidation and the signal call.
+macOS 14 or later. Swift 6 toolchain (xcode or command line tools).
 
-Verification exercised real changing lid/light/temperature/motion readings, sampling pause/manual refresh, favorite pinning and card details, capacity bars, and native PID confirmation cancel/SIGTERM/SIGKILL using only owned temporary `/bin/sleep` children. The 30 deterministic regressions cover native decoding, sensor bounds, accounting, counter wrap, and process-identity safety.
-
-## Build
-
-Requires macOS 14 or newer and a Swift 6 toolchain (Xcode or Command Line Tools).
-
-```sh
 ./build.sh
-swift test
-```
+ swift test
 
-The script creates `dist/Unified Memory.app`, generates its native icon, and ad-hoc signs the bundle for local use. To install a rebuilt version, quit the running app first:
+builds dist/Unified Memory.app. Makes the native icon. Adhoc signs the bundle for local use. To put a re-built version into use, first close any running app.
 
-```sh
 ditto "dist/Unified Memory.app" "$HOME/Applications/Unified Memory.app"
-open "$HOME/Applications/Unified Memory.app"
-```
+ open "$HOME/Applications/Unified Memory.app"
 
-The accounting regression test protects against double-counting speculative pages and confusing physical compressed memory with uncompressed contents.
+Accounting regression test to avoid double counting speculative pages. Avoids false-positives with physical compressed memory versus uncompressed memory content.
+
+#### Needs macOS 14+ swift6 toolchain (xcode or command line tools)
